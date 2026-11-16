@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D Lenia Lab</title>
+<style>
+  :root{--bg:#0b0d12;--panel:#13161e;--line:#252a37;--text:#e6e8ee;--dim:#8b92a5;--acc:#f59e0b;--acc2:#38bdf8}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:13px/1.4 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  #app{display:flex;height:100%}
+  #panel{width:340px;flex:none;overflow-y:auto;background:var(--panel);border-right:1px solid var(--line);padding:14px 14px 30px}
+  #view{flex:1;position:relative;min-width:0}
+  #view canvas{display:block}
+  h1{font-size:15px;margin:0 0 2px}
+  .sub{color:var(--dim);font-size:12px;margin-bottom:10px}
+  section{border-top:1px solid var(--line);padding:10px 0 4px}
+  h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:0 0 8px;font-weight:600}
+  label{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0}
+  label > span:first-child{white-space:nowrap}
+  label span.v{color:var(--dim);font-variant-numeric:tabular-nums;min-width:46px;text-align:right}
+  input[type=range]{flex:1;accent-color:var(--acc);min-width:0}
+  input[type=text],input[type=number],select{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px 7px;font:inherit}
+  input[type=text]{flex:1;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  input[type=number]{width:84px}
+  select{min-width:120px}
+  button{background:#1c2030;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font:inherit;cursor:pointer}
+  button:hover{border-color:#3a4155}
+  button.primary{background:var(--acc);border-color:var(--acc);color:#111;font-weight:600}
+  .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .note{color:var(--dim);font-size:12px;margin:5px 0 6px}
+  .err{color:#f87171;font-size:12px;min-height:14px}
+  .help{color:var(--dim);font-size:11.5px;line-height:1.5}
+  code{font-family:ui-monospace,Menlo,monospace;color:#cbd2e1}
+  canvas.plot{width:100%;height:84px;background:var(--bg);border:1px solid var(--line);border-radius:6px;display:block;margin:4px 0}
+  .cap{font-size:11px;color:var(--dim)}
+  #hud{position:absolute;left:12px;top:10px;font:12px ui-monospace,Menlo,monospace;color:#cbd2e1;background:rgba(11,13,18,.72);padding:6px 9px;border-radius:6px;pointer-events:none;white-space:pre}
+  #keys{position:absolute;right:12px;bottom:10px;font-size:11px;color:var(--dim);pointer-events:none}
+  #err{position:absolute;inset:0;display:none;align-items:center;justify-content:center;color:#f87171;padding:30px;text-align:center}
+  @media (max-width:820px){#app{flex-direction:column}#panel{width:100%;height:46%;border-right:none;border-bottom:1px solid var(--line)}#view{height:54%}}
+  #home{display:inline-block;color:#8b92a5;text-decoration:none;font-size:12px;margin-bottom:8px}
+  #home:hover{color:#e6e8ee}
+</style>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+</head>
+<body>
+<div id="app">
+  <div id="panel">
+    <a id="home" href="../">&larr; All simulations</a>
+    <h1>3D Lenia Lab</h1>
+    <div class="sub">Continuous 3D cellular automaton. FFT convolution runs in a background thread; rendering is GPU ray-marched.</div>
+
+    <section>
+      <h2>Preset</h2>
+      <select id="preset" style="width:100%"></select>
+      <div class="note" id="presetNote"></div>
+    </section>
+
+    <section>
+      <h2>Kernel K (who counts as a neighbour)</h2>
+      <label><span>Radius R</span><input type="range" id="R" min="3" max="30" step="1"><span class="v" id="RV"></span></label>
+      <label><span>Rings β</span><input type="text" id="beta" spellcheck="false" placeholder="1, 0.5"></label>
+      <div class="err" id="betaErr"></div>
+      <canvas class="plot" id="kPlot"></canvas>
+      <div class="cap">K(r): weight given to a cell at distance r. Each β entry is one concentric shell, with that peak height.</div>
+    </section>
+
+    <section>
+      <h2>Growth G (how cells respond)</h2>
+      <label><span>μ (centre)</span><input type="range" id="mu" min="0.02" max="0.6" step="0.001"><span class="v" id="muV"></span></label>
+      <label><span>σ (width)</span><input type="range" id="sigma" min="0.002" max="0.12" step="0.001"><span class="v" id="sigmaV"></span></label>
+      <label><span>T (1/dt)</span><input type="range" id="T" min="1" max="40" step="1"><span class="v" id="TV"></span></label>
+      <canvas class="plot" id="gPlot"></canvas>
+      <div class="cap">Curve: G(u), growth for neighbourhood value u = K∗A. Bars: where the live cells' u values actually fall right now (log scale). Cells grow where G &gt; 0.</div>
+    </section>
+
+    <section>
+      <h2>Initial condition</h2>
+      <label><span>Shape</span>
+        <select id="shape">
+          <option value="sphere">Random sphere</option>
+          <option value="cube">Random cube</option>
+          <option value="blobs">Several random blobs</option>
+          <option value="lopsided">Lopsided sphere (gradient)</option>
+          <option value="noise">Noise everywhere</option>
+        </select>
+      </label>
+      <label><span>Size (× R)</span><input type="range" id="size" min="0.3" max="3" step="0.05"><span class="v" id="sizeV"></span></label>
+      <label><span>Density</span><input type="range" id="density" min="0.05" max="1" step="0.05"><span class="v" id="densityV"></span></label>
+      <label><span>RNG seed</span><span class="row" style="flex-wrap:nowrap"><input type="number" id="seed" value="3"><button id="dice">New</button></span></label>
+      <div class="row" style="margin-top:6px">
+        <button class="primary" id="reset">Reset</button>
+        <button id="drop" title="Add a random blob at a random spot">Drop a blob</button>
+        <button id="clear">Clear</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Playback</h2>
+      <div class="row">
+        <button class="primary" id="play" style="min-width:74px">Play</button>
+        <button id="stepBtn">Step</button>
+        <button id="step10">+10</button>
+      </div>
+      <label><span>Max speed</span><input type="range" id="speed" min="1" max="60" value="30"><span class="v" id="speedV"></span></label>
+      <label><span>Grid</span>
+        <select id="gridN"><option>32</option><option selected>64</option><option value="128">128 (slow)</option></select>
+      </label>
+      <div class="cap">Changing the grid rescales R so creatures keep their size relative to the world. The world wraps around (torus).</div>
+    </section>
+
+    <section>
+      <h2>View</h2>
+      <label><span>Render</span>
+        <select id="mode"><option value="1">Iso-surface</option><option value="0">Glowing volume</option></select>
+      </label>
+      <label><span>Threshold</span><input type="range" id="thr" min="0.02" max="0.9" step="0.01" value="0.2"><span class="v" id="thrV"></span></label>
+      <label><span>Volume opacity</span><input type="range" id="opac" min="0.2" max="8" step="0.1" value="2"><span class="v" id="opacV"></span></label>
+      <label><span>Colour map</span>
+        <select id="cmap"><option value="inferno">Inferno</option><option value="viridis">Viridis</option><option value="ice">Ice</option><option value="lenia">Lenia</option></select>
+      </label>
+      <label><span>Slice (show x &lt;)</span><input type="range" id="clip" min="0.02" max="1" step="0.01" value="1"><span class="v" id="clipV"></span></label>
+      <label><span>Bounding box</span><input type="checkbox" id="showBox" checked></label>
+      <label><span>Auto-rotate</span><input type="checkbox" id="autoRot"></label>
+      <div class="cap">Slice through a creature to see its internal structure: the cut face is coloured by value.</div>
+    </section>
+
+    <section>
+      <h2>Mass over time</h2>
+      <canvas class="plot" id="mPlot"></canvas>
+      <label><span>Stop when extinct</span><input type="checkbox" id="autostop" checked></label>
+    </section>
+
+    <section>
+      <h2>How it works</h2>
+      <div class="help">
+        Each cell holds a value A in [0, 1]. Every step:<br>
+        1. <code>U = K ∗ A</code>, a weighted average of the surrounding shell (computed with a 3D FFT).<br>
+        2. <code>G(U) = 2·exp(−(U−μ)²/2σ²) − 1</code>, which is +1 when U ≈ μ and −1 far from it.<br>
+        3. <code>A ← clip(A + G(U)/T, 0, 1)</code>.<br><br>
+        A creature (soliton) is a blob whose own shape keeps U near μ at its body and away from μ just outside. In 3D these are rare. The presets here were found by a short automated search, and they are only metastable: most eventually bud and fill space, or fade. Finding long-lived or moving 3D creatures is the open part.
+      </div>
+    </section>
+  </div>
+  <div id="view">
+    <div id="hud"></div>
+    <div id="keys">drag: orbit · scroll: zoom · space: play · . step · r reset · b drop blob</div>
+    <div id="err"></div>
+  </div>
+</div>
+
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+const $ = id => document.getElementById(id);
+
+// Presets: R is given for a 64³ grid. Found by headless search on 32³ (R=7) and checked at 64³ (R=13).
+const PRESETS = [
+  {name:'Sphere soliton (metastable)', R:13, beta:[1,0.5], mu:0.24, sigma:0.03, T:10, shape:'sphere', size:1.2, density:1,
+   note:'Settles into a stable spherical creature with a shell structure (slice it). Holds for several hundred steps, then buds and spreads through the world.'},
+  {name:'Fragile soliton', R:13, beta:[1,0.5], mu:0.26, sigma:0.035, T:10, shape:'sphere', size:1.2, density:1,
+   note:'Stable for about 1,000 steps, then slowly loses mass and dies. Try nudging μ or σ to see if you can stabilise it.'},
+  {name:'Pulsing budder', R:13, beta:[1,0.5,0.25], mu:0.24, sigma:0.03, T:10, shape:'sphere', size:1.2, density:1,
+   note:'Three-ring kernel. Pulses in size, swells, then breaks up and colonises space.'},
+  {name:'Slow bloom', R:13, beta:[1,1], mu:0.26, sigma:0.04, T:10, shape:'sphere', size:1.2, density:1,
+   note:'Quiet for a long time, then grows and fills the world.'},
+  {name:'Turbulent foam', R:13, beta:[1,0.5], mu:0.12, sigma:0.02, T:10, shape:'noise', size:1, density:0.5,
+   note:'Low μ: a space-filling, constantly churning foam.'},
+  {name:'Labyrinth', R:13, beta:[1], mu:0.15, sigma:0.03, T:10, shape:'noise', size:1, density:0.5,
+   note:'Single-ring kernel from noise: settles into a frozen 3D labyrinth.'},
+  {name:'Lattice', R:13, beta:[0.5,1], mu:0.21, sigma:0.04, T:10, shape:'noise', size:1, density:0.5,
+   note:'Outer-ring-heavy kernel tends to form a regular cell lattice.'},
+  {name:'Collision test', R:13, beta:[1,0.5], mu:0.24, sigma:0.03, T:10, shape:'blobs', size:1.2, density:1,
+   note:'Several metastable solitons at once. Watch whether they merge, repel or spread.'},
+];
+
+// ---------- state ----------
+let N = 64, NC = N*N*N;
+let R = 13, beta = [1,0.5], mu = 0.24, sigma = 0.03, T = 10;
+let A = new Float32Array(NC);
+let gen = 0, mass = 0, ms = 0, hist = new Float32Array(200), massHist = [];
+let playing = false, busy = false, lastReq = 0;
+const MAXHIST = 500;
+
+// ---------- worker ----------
+const worker = new Worker('worker.js');
+worker.onmessage = e => {
+  const d = e.data; if (d.type !== 'state') return;
+  A = d.A; gen = d.gen; mass = d.mass; hist = d.hist; if (d.ms) ms = d.ms;
+  busy = false;
+  if (d.ms){ massHist.push(mass); if (massHist.length > MAXHIST) massHist.shift(); }
+  uploadVolume(); drawG(); drawMass(); updateHud();
+  if (playing && $('autostop').checked && mass < 0.5){ setPlaying(false); }
+};
+worker.onerror = e => { showErr('Simulation worker failed: ' + e.message); };
+function sendInit(){ busy = true; worker.postMessage({type:'init', N, A, R, beta, mu, sigma, dt:1/T}); }
+function sendKernel(){ worker.postMessage({type:'kernel', R, beta}); }
+function sendGrowth(){ worker.postMessage({type:'growth', mu, sigma, dt:1/T}); }
+function sendState(resetGen){ busy = true; worker.postMessage({type:'state', A, resetGen}); }
+function requestSteps(k){ busy = true; lastReq = performance.now(); worker.postMessage({type:'step', k}); }
+
+// ---------- seeding ----------
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function stamp(rnd, cx, cy, cz, rad, dens, kind){
+  const n=N, n2=n*n, r = Math.ceil(rad);
+  for (let dz=-r; dz<=r; dz++) for (let dy=-r; dy<=r; dy++) for (let dx=-r; dx<=r; dx++){
+    if (kind !== 'cube' && dx*dx+dy*dy+dz*dz > rad*rad) continue;
+    if (rnd() > dens) continue;
+    let v = rnd();
+    if (kind === 'lopsided') v *= (dx + rad) / (2*rad);
+    const x=((Math.round(cx)+dx)%n+n)%n, y=((Math.round(cy)+dy)%n+n)%n, z=((Math.round(cz)+dz)%n+n)%n;
+    const i = z*n2 + y*n + x; A[i] = Math.max(A[i], v);
+  }
+}
+function seedState(){
+  A = new Float32Array(NC);
+  const rnd = mulberry32(parseInt($('seed').value)||0);
+  const shape = $('shape').value, size = +$('size').value, dens = +$('density').value, c = N/2;
+  if (shape === 'noise'){ for (let i=0;i<NC;i++) if (rnd() < dens) A[i] = rnd(); }
+  else if (shape === 'blobs'){
+    const k = 3 + Math.floor(rnd()*3);
+    for (let j=0;j<k;j++) stamp(rnd, rnd()*N, rnd()*N, rnd()*N, size*R, dens, 'sphere');
+  }
+  else stamp(rnd, c, c, c, size*R, dens, shape);
+  massHist = []; gen = 0;
+}
+function reset(){ seedState(); sendState(true); }
+
+// ---------- kernel / growth plots ----------
+const core = r => (r<=0||r>=1) ? 0 : Math.exp(4 - 1/(r*(1-r)));
+function kernelAt(r){ if (r>=1) return 0; const B=beta.length, br=B*r, k=Math.min(B-1, Math.floor(br)); return beta[k]*core(br-k); }
+function prepCanvas(cv){
+  const dpr = Math.min(devicePixelRatio, 2), w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== Math.round(w*dpr)){ cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr); }
+  const g = cv.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,w,h); return [g,w,h];
+}
+function drawK(){
+  const [g,w,h] = prepCanvas($('kPlot'));
+  const mx = Math.max(...beta, 1e-6);
+  g.strokeStyle = '#2d3343'; g.beginPath(); g.moveTo(0,h-12); g.lineTo(w,h-12); g.stroke();
+  g.beginPath(); g.strokeStyle = '#f59e0b'; g.lineWidth = 2;
+  for (let i=0;i<=300;i++){ const r=i/300, x = 4+r*(w-8), y = h-12-(kernelAt(r)/mx)*(h-22); i?g.lineTo(x,y):g.moveTo(x,y); }
+  g.stroke();
+  g.fillStyle = '#8b92a5'; g.font = '10px ui-sans-serif,system-ui'; g.fillText('0', 4, h-2); g.fillText(`r = ${R} cells`, w-62, h-2);
+}
+function drawG(){
+  const [g,w,h] = prepCanvas($('gPlot'));
+  const umax = Math.min(1, Math.max(0.3, mu + 6*sigma));
+  const X = u => 4 + u/umax*(w-8), Y = v => (h-12)/2 - v*((h-16)/2) + 2;
+  // histogram
+  let hm = 0; const nb = Math.ceil(umax*200);
+  for (let b=0;b<nb;b++) hm = Math.max(hm, Math.log1p(hist[b]||0));
+  if (hm > 0){ g.fillStyle = 'rgba(56,189,248,0.35)';
+    for (let b=0;b<nb;b++){ const v = Math.log1p(hist[b]||0)/hm; if (!v) continue; const x0=X(b/200), x1=X((b+1)/200); g.fillRect(x0, h-12-v*(h-16), Math.max(1,x1-x0-0.5), v*(h-16)); } }
+  g.strokeStyle = '#2d3343'; g.beginPath(); g.moveTo(0,Y(0)); g.lineTo(w,Y(0)); g.stroke();
+  g.beginPath(); g.strokeStyle = '#f59e0b'; g.lineWidth = 2;
+  for (let i=0;i<=300;i++){ const u=i/300*umax, v = 2*Math.exp(-((u-mu)*(u-mu))/(2*sigma*sigma))-1; const x=X(u), y=Y(v); i?g.lineTo(x,y):g.moveTo(x,y); }
+  g.stroke();
+  g.fillStyle = '#8b92a5'; g.font = '10px ui-sans-serif,system-ui'; g.fillText('u = 0', 4, h-2); g.fillText(umax.toFixed(2), w-28, h-2); g.fillText('+1', 4, 11); g.fillText('−1', 4, h-14);
+}
+function drawMass(){
+  const [g,w,h] = prepCanvas($('mPlot'));
+  if (massHist.length < 2) return;
+  let mx = 1; for (const m of massHist) mx = Math.max(mx, m);
+  g.beginPath(); g.strokeStyle = '#f59e0b'; g.lineWidth = 1.5;
+  massHist.forEach((m,i)=>{ const x = i/(MAXHIST-1)*w, y = h-4-(m/mx)*(h-14); i?g.lineTo(x,y):g.moveTo(x,y); });
+  g.stroke(); g.fillStyle = '#8b92a5'; g.font = '10px ui-sans-serif,system-ui'; g.fillText('max ' + Math.round(mx).toLocaleString(), 4, 11);
+}
+
+// ---------- rendering ----------
+const view = $('view');
+function showErr(msg){ $('err').style.display='flex'; $('err').textContent = msg; }
+let renderer;
+try { renderer = new THREE.WebGLRenderer({antialias:true}); }
+catch(e){ showErr('WebGL2 is not available in this browser, so the volume renderer cannot start.'); throw e; }
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setClearColor(0x0b0d12);
+view.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 10000);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+
+const CMAPS = {
+  inferno:[[0,0,4],[40,11,84],[101,21,110],[159,42,99],[212,72,66],[245,125,21],[250,193,39],[252,255,164]],
+  viridis:[[68,1,84],[72,40,120],[62,74,137],[49,104,142],[38,130,142],[31,158,137],[53,183,121],[109,205,89],[180,222,44],[253,231,37]],
+  ice:[[6,10,30],[20,50,110],[35,100,180],[90,170,230],[170,225,250],[245,252,255]],
+  lenia:[[10,0,40],[0,40,160],[0,160,220],[60,220,120],[240,230,40],[250,120,20],[200,20,20]],
+};
+const cmapData = new Uint8Array(256*4);
+const cmapTex = new THREE.DataTexture(cmapData, 256, 1, THREE.RGBAFormat);
+cmapTex.magFilter = cmapTex.minFilter = THREE.LinearFilter;
+function setCmap(name){
+  const st = CMAPS[name];
+  for (let i=0;i<256;i++){
+    const f = i/255*(st.length-1), k = Math.min(st.length-2, Math.floor(f)), u = f-k;
+    for (let c=0;c<3;c++) cmapData[i*4+c] = st[k][c] + (st[k+1][c]-st[k][c])*u;
+    cmapData[i*4+3] = 255;
+  }
+  cmapTex.needsUpdate = true;
+}
+
+let volData, volTex, volMesh, boxLines;
+const volMat = new THREE.ShaderMaterial({
+  uniforms: { map:{value:null}, cmap:{value:cmapTex}, thr:{value:0.2}, opac:{value:2}, mode:{value:1}, clipX:{value:1}, size:{value:64} },
+  side: THREE.BackSide, transparent: true, depthWrite: false,
+  vertexShader: `
+    varying vec3 vOrigin; varying vec3 vDir;
+    void main(){
+      vOrigin = (inverse(modelMatrix) * vec4(cameraPosition, 1.0)).xyz;
+      vDir = position - vOrigin;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }`,
+  fragmentShader: `
+    precision highp float; precision highp sampler3D;
+    uniform sampler3D map; uniform sampler2D cmap;
+    uniform float thr, opac, clipX, size; uniform int mode;
+    varying vec3 vOrigin; varying vec3 vDir;
+    vec2 hitBox(vec3 o, vec3 d){
+      vec3 bmin = vec3(-0.5); vec3 bmax = vec3(clipX - 0.5, 0.5, 0.5);
+      vec3 inv = 1.0 / d; vec3 t0 = (bmin - o) * inv; vec3 t1 = (bmax - o) * inv;
+      vec3 tmin = min(t0, t1); vec3 tmax = max(t0, t1);
+      return vec2(max(tmin.x, max(tmin.y, tmin.z)), min(tmax.x, min(tmax.y, tmax.z)));
+    }
+    float S(vec3 p){ return texture(map, p + 0.5).r; }
+    vec3 nrm(vec3 p){ float e = 1.0 / size;
+      return -normalize(vec3(S(p+vec3(e,0,0))-S(p-vec3(e,0,0)), S(p+vec3(0,e,0))-S(p-vec3(0,e,0)), S(p+vec3(0,0,e))-S(p-vec3(0,0,e))) + 1e-6); }
+    vec3 cm(float t){ return texture(cmap, vec2(clamp(t,0.0,1.0), 0.5)).rgb; }
+    void main(){
+      vec3 rd = normalize(vDir);
+      vec2 b = hitBox(vOrigin, rd);
+      if (b.x > b.y) discard;
+      b.x = max(b.x, 0.0);
+      float delta = 1.0 / (size * 1.6);
+      vec4 acc = vec4(0.0);
+      float t = b.x;
+      for (int i = 0; i < 700; i++){
+        if (t > b.y) break;
+        vec3 p = vOrigin + t * rd;
+        float v = S(p);
+        if (mode == 1){
+          if (v > thr){
+            if (i == 0){ acc = vec4(cm(0.25 + 0.75 * v), 1.0); break; }
+            // refine hit
+            float a = t - delta, c = t;
+            for (int k = 0; k < 5; k++){ float m = 0.5*(a+c); if (S(vOrigin + m*rd) > thr) c = m; else a = m; }
+            p = vOrigin + c * rd;
+            vec3 n = nrm(p);
+            vec3 L = normalize(vec3(0.5, 0.8, 0.35));
+            float dif = max(dot(n, L), 0.0), head = max(dot(n, -rd), 0.0);
+            float spec = pow(max(dot(reflect(-L, n), -rd), 0.0), 24.0);
+            vec3 base = cm(0.3 + 0.65 * (p.y + 0.5));
+            acc = vec4(base * (0.22 + 0.5*dif + 0.35*head) + 0.25*spec, 1.0);
+            break;
+          }
+        } else {
+          float w = max(v - thr, 0.0) / max(1.0 - thr, 1e-3);
+          if (w > 0.0){
+            float a = 1.0 - exp(-w * opac * delta * size * 0.5);
+            vec3 c = cm(0.15 + 0.85 * v) * (0.6 + 0.8 * w);
+            acc.rgb += (1.0 - acc.a) * a * c; acc.a += (1.0 - acc.a) * a;
+            if (acc.a > 0.97) break;
+          }
+        }
+        t += delta;
+      }
+      if (acc.a <= 0.0) discard;
+      gl_FragColor = acc;
+    }`
+});
+
+function buildVolume(){
+  if (volMesh){ scene.remove(volMesh); volMesh.geometry.dispose(); volTex.dispose(); }
+  if (boxLines){ scene.remove(boxLines); boxLines.geometry.dispose(); }
+  volData = new Uint8Array(NC);
+  volTex = new THREE.Data3DTexture(volData, N, N, N);
+  volTex.format = THREE.RedFormat; volTex.type = THREE.UnsignedByteType;
+  volTex.minFilter = volTex.magFilter = THREE.LinearFilter; volTex.unpackAlignment = 1; volTex.needsUpdate = true;
+  volMat.uniforms.map.value = volTex; volMat.uniforms.size.value = N;
+  volMesh = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), volMat); volMesh.scale.set(N,N,N); scene.add(volMesh);
+  boxLines = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(N,N,N)), new THREE.LineBasicMaterial({color:0x2f3546}));
+  boxLines.visible = $('showBox').checked; scene.add(boxLines);
+  camera.position.set(N*1.25, N*0.9, N*1.55); controls.target.set(0,0,0); controls.update();
+}
+function uploadVolume(){
+  if (!volData || A.length !== NC) return;
+  for (let i=0;i<NC;i++) volData[i] = A[i]*255;
+  volTex.needsUpdate = true;
+}
+
+function updateHud(){
+  $('hud').textContent =
+`R ${R}  β [${beta.join(', ')}]  μ ${mu.toFixed(3)}  σ ${sigma.toFixed(3)}  T ${T}
+step  ${gen}
+mass  ${mass.toFixed(0)}
+grid  ${N}³  ·  ${ms.toFixed(1)} ms/step` + (playing ? '' : '\n(paused)');
+}
+
+// ---------- UI ----------
+function syncUI(){
+  $('R').value = R; $('beta').value = beta.join(', '); $('mu').value = mu; $('sigma').value = sigma; $('T').value = T;
+  $('RV').textContent = R; $('muV').textContent = mu.toFixed(3); $('sigmaV').textContent = sigma.toFixed(3); $('TV').textContent = T;
+  $('sizeV').textContent = (+$('size').value).toFixed(2); $('densityV').textContent = (+$('density').value).toFixed(2);
+  $('speedV').textContent = $('speed').value + '/s'; $('thrV').textContent = (+$('thr').value).toFixed(2);
+  $('opacV').textContent = (+$('opac').value).toFixed(1); $('clipV').textContent = Math.round(+$('clip').value*N);
+  $('betaErr').textContent = '';
+  drawK(); drawG(); updateHud();
+}
+function setPlaying(p){ playing = p; $('play').textContent = p ? 'Pause' : 'Play'; updateHud(); }
+function loadPreset(i){
+  const p = PRESETS[i];
+  R = Math.max(2, Math.round(p.R * N / 64)); beta = p.beta.slice(); mu = p.mu; sigma = p.sigma; T = p.T;
+  $('shape').value = p.shape; $('size').value = p.size; $('density').value = p.density;
+  $('presetNote').textContent = p.note;
+  syncUI(); sendKernel(); sendGrowth(); reset();
+}
+PRESETS.forEach((p,i)=>{ const o=document.createElement('option'); o.value=i; o.textContent=p.name; $('preset').appendChild(o); });
+$('preset').onchange = e => loadPreset(+e.target.value);
+function markCustom(){ $('presetNote').textContent = 'Custom parameters.'; }
+
+$('R').addEventListener('input', e => { R = +e.target.value; syncUI(); });
+$('R').addEventListener('change', () => { sendKernel(); markCustom(); });
+$('beta').addEventListener('change', e => {
+  const vals = e.target.value.split(/[,\s]+/).filter(Boolean).map(Number);
+  if (!vals.length || vals.some(v => !isFinite(v) || v < 0) || vals.every(v => v === 0) || vals.length > 6){ $('betaErr').textContent = 'Use 1 to 6 non-negative numbers, e.g. 1, 0.5'; return; }
+  beta = vals; syncUI(); sendKernel(); markCustom();
+});
+for (const [id, set] of [['mu', v=>mu=v], ['sigma', v=>sigma=v], ['T', v=>T=v]]){
+  $(id).addEventListener('input', e => { set(+e.target.value); syncUI(); sendGrowth(); markCustom(); });
+}
+for (const id of ['size','density','speed','thr','opac','clip']) $(id).addEventListener('input', () => {
+  syncUI(); volMat.uniforms.thr.value = +$('thr').value; volMat.uniforms.opac.value = +$('opac').value; volMat.uniforms.clipX.value = +$('clip').value;
+});
+$('mode').onchange = e => { volMat.uniforms.mode.value = +e.target.value; if (+e.target.value === 0 && +$('thr').value > 0.3){ $('thr').value = 0.05; $('thr').dispatchEvent(new Event('input')); } };
+$('cmap').onchange = e => setCmap(e.target.value);
+$('showBox').onchange = e => { if (boxLines) boxLines.visible = e.target.checked; };
+$('autoRot').onchange = e => { controls.autoRotate = e.target.checked; controls.autoRotateSpeed = 1.0; };
+$('dice').onclick = () => { $('seed').value = Math.floor(Math.random()*1e6); reset(); };
+$('reset').onclick = reset;
+$('clear').onclick = () => { A = new Float32Array(NC); massHist = []; sendState(true); };
+function dropBlob(){
+  if (busy){ setTimeout(dropBlob, 30); return; }
+  const rnd = mulberry32(Math.floor(Math.random()*1e9));
+  stamp(rnd, rnd()*N, rnd()*N, rnd()*N, (+$('size').value)*R, +$('density').value, 'sphere');
+  sendState(false);
+}
+$('drop').onclick = dropBlob;
+$('play').onclick = () => setPlaying(!playing);
+$('stepBtn').onclick = () => { setPlaying(false); if (!busy) requestSteps(1); };
+$('step10').onclick = () => { setPlaying(false); if (!busy) requestSteps(10); };
+$('gridN').onchange = e => {
+  const old = N; N = +e.target.value; NC = N*N*N;
+  R = Math.max(2, Math.round(R * N / old)); $('R').max = Math.max(30, Math.round(N/2.5));
+  setPlaying(false); buildVolume(); seedState(); syncUI(); sendInit();
+};
+window.addEventListener('keydown', e => {
+  if (e.target.matches('input,select,textarea')) return;
+  if (e.code === 'Space'){ e.preventDefault(); setPlaying(!playing); }
+  else if (e.key === '.'){ setPlaying(false); if (!busy) requestSteps(1); }
+  else if (e.key === 'r' || e.key === 'R') reset();
+  else if (e.key === 'b' || e.key === 'B') dropBlob();
+});
+
+function resize(){
+  const w = view.clientWidth, h = view.clientHeight;
+  renderer.setSize(w, h); camera.aspect = w/Math.max(1,h); camera.updateProjectionMatrix();
+  drawK(); drawG(); drawMass();
+}
+new ResizeObserver(resize).observe(view);
+
+function frame(now){
+  requestAnimationFrame(frame);
+  if (playing && !busy && now - lastReq >= 1000 / +$('speed').value) requestSteps(1);
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+// ---------- init ----------
+setCmap('inferno');
+buildVolume();
+$('R').max = 30;
+seedState();
+const p0 = PRESETS[0];
+R = p0.R; beta = p0.beta.slice(); mu = p0.mu; sigma = p0.sigma; T = p0.T;
+$('shape').value = p0.shape; $('size').value = p0.size; $('density').value = p0.density; $('presetNote').textContent = p0.note;
+seedState(); syncUI(); sendInit(); resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

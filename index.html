@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D Automata Lab</title>
+<meta name="description" content="Interactive 3D cellular automata and 3D Lenia simulations in the browser.">
+<style>
+  :root{--bg:#0b0d12;--panel:#13161e;--line:#252a37;--text:#e6e8ee;--dim:#8b92a5;--acc:#f59e0b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  main{max-width:1040px;margin:0 auto;padding:56px 24px 64px}
+  h1{font-size:34px;margin:0 0 8px;letter-spacing:-.02em}
+  .lead{color:var(--dim);max-width:640px;margin:0 0 40px;font-size:16px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:22px}
+  a.card{display:block;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;color:inherit;text-decoration:none;transition:border-color .15s,transform .15s}
+  a.card:hover{border-color:#3d4458;transform:translateY(-2px)}
+  .card img{display:block;width:100%;aspect-ratio:640/548;object-fit:cover;background:#0b0d12;border-bottom:1px solid var(--line)}
+  .body{padding:18px 20px 20px}
+  h2{font-size:19px;margin:0 0 6px}
+  .card p{margin:0 0 12px;color:var(--dim);font-size:14px}
+  .tags{display:flex;gap:6px;flex-wrap:wrap}
+  .tag{font-size:11.5px;color:#cbd2e1;border:1px solid var(--line);border-radius:999px;padding:2px 9px}
+  .go{color:var(--acc);font-weight:600;font-size:14px;margin-top:14px;display:block}
+</style>
+</head>
+<body>
+<main>
+  <h1>3D Automata Lab</h1>
+  <p class="lead">Two interactive simulations of artificial life in three dimensions. Change the rules while they run, slice them open, and see what grows. Everything runs in your browser.</p>
+
+  <div class="grid">
+    <a class="card" href="ca/">
+      <img src="assets/ca.jpg" alt="Voxel structure grown by a 3D cellular automaton">
+      <div class="body">
+        <h2>3D Cellular Automata</h2>
+        <p>Discrete cells on a cubic grid. Edit birth and survival rules, add multi-state decay, and explore classic rules, including Carter Bays' 3D Game of Life.</p>
+        <div class="tags"><span class="tag">S/B/C/N rules</span><span class="tag">Moore &amp; von Neumann</span><span class="tag">up to 96³</span></div>
+        <span class="go">Open simulation &rarr;</span>
+      </div>
+    </a>
+    <a class="card" href="lenia/">
+      <img src="assets/lenia.jpg" alt="A 3D Lenia creature sliced open to show its internal shell">
+      <div class="body">
+        <h2>3D Lenia</h2>
+        <p>Continuous space, state and time. Shape the kernel and growth function, watch blob-like creatures form, and slice through them to see their internal structure.</p>
+        <div class="tags"><span class="tag">FFT convolution</span><span class="tag">ray-marched volume</span><span class="tag">live growth histogram</span></div>
+        <span class="go">Open simulation &rarr;</span>
+      </div>
+    </a>
+  </div>
+
+</main>
+</body>
+</html>

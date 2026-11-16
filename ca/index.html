@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D Cellular Automata Lab</title>
+<style>
+  :root{--bg:#0d0f14;--panel:#14171f;--line:#262b38;--text:#e6e8ee;--dim:#8b92a5;--acc:#f97316;--acc2:#a78bfa}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:13px/1.4 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  #app{display:flex;height:100%}
+  #panel{width:330px;flex:none;overflow-y:auto;background:var(--panel);border-right:1px solid var(--line);padding:14px 14px 30px}
+  #view{flex:1;position:relative;min-width:0}
+  #view canvas{display:block}
+  h1{font-size:15px;margin:0 0 2px}
+  .sub{color:var(--dim);font-size:12px;margin-bottom:10px}
+  section{border-top:1px solid var(--line);padding:10px 0 4px}
+  h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:0 0 8px;font-weight:600}
+  label{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0}
+  label span.v{color:var(--dim);font-variant-numeric:tabular-nums;min-width:38px;text-align:right}
+  input[type=range]{flex:1;accent-color:var(--acc)}
+  input[type=text],input[type=number],select{background:#0d0f14;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px 7px;font:inherit}
+  input[type=text]{width:100%;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  input[type=number]{width:80px}
+  select{min-width:120px}
+  button{background:#1d2130;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font:inherit;cursor:pointer}
+  button:hover{border-color:#3a4155}
+  button.primary{background:var(--acc);border-color:var(--acc);color:#111;font-weight:600}
+  .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .chips{display:flex;flex-wrap:wrap;gap:3px;margin:4px 0 8px}
+  .chip{width:27px;height:23px;padding:0;font-size:11px;font-variant-numeric:tabular-nums;border-radius:4px}
+  .chip.on{background:var(--acc);border-color:var(--acc);color:#111;font-weight:600}
+  .chips.b .chip.on{background:var(--acc2);border-color:var(--acc2)}
+  .lbl{font-size:12px;color:var(--dim);margin-top:6px}
+  .err{color:#f87171;font-size:12px;min-height:16px}
+  .note{color:var(--dim);font-size:12px;margin:4px 0 6px}
+  .help{color:var(--dim);font-size:11.5px;line-height:1.45}
+  code{font-family:ui-monospace,Menlo,monospace;color:#cbd2e1}
+  #hud{position:absolute;left:12px;top:10px;font:12px ui-monospace,Menlo,monospace;color:#cbd2e1;background:rgba(13,15,20,.7);padding:6px 9px;border-radius:6px;pointer-events:none;white-space:pre}
+  #keys{position:absolute;right:12px;bottom:10px;font-size:11px;color:var(--dim);pointer-events:none}
+  #chart{width:100%;height:70px;background:#0d0f14;border:1px solid var(--line);border-radius:6px}
+  .legend{display:flex;gap:12px;font-size:11px;color:var(--dim);margin-top:4px}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:middle}
+  @media (max-width:820px){#app{flex-direction:column}#panel{width:100%;height:46%;border-right:none;border-bottom:1px solid var(--line)}#view{height:54%}}
+  #home{display:inline-block;color:#8b92a5;text-decoration:none;font-size:12px;margin-bottom:8px}
+  #home:hover{color:#e6e8ee}
+</style>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+</head>
+<body>
+<div id="app">
+  <div id="panel">
+    <a id="home" href="../">&larr; All simulations</a>
+    <h1>3D Cellular Automata Lab</h1>
+    <div class="sub">Outer-totalistic 3D CA with multi-state decay. Edit the rule live while it runs.</div>
+
+    <section>
+      <h2>Preset</h2>
+      <select id="preset" style="width:100%"></select>
+      <div class="note" id="presetNote"></div>
+    </section>
+
+    <section>
+      <h2>Rule</h2>
+      <div class="row" style="flex-wrap:nowrap">
+        <input type="text" id="ruleText" spellcheck="false">
+        <button id="copyRule" title="Copy rule string">Copy</button>
+      </div>
+      <div class="err" id="ruleErr"></div>
+      <div class="lbl">Survive with N alive neighbours (S)</div>
+      <div class="chips s" id="chipsS"></div>
+      <div class="lbl">Born with N alive neighbours (B)</div>
+      <div class="chips b" id="chipsB"></div>
+      <label>States (C)<input type="number" id="states" min="2" max="64" value="5"></label>
+      <label>Neighbourhood
+        <select id="nbhd"><option value="M">Moore (26)</option><option value="VN">von Neumann (6)</option></select>
+      </label>
+      <label>Wrap edges (torus)<input type="checkbox" id="wrap"></label>
+      <div class="row" style="margin-top:6px">
+        <button id="randRule">Random rule</button>
+        <button id="clearS">Clear S</button>
+        <button id="clearB">Clear B</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Initial condition</h2>
+      <label>Shape
+        <select id="shape">
+          <option value="cube">Random cube</option>
+          <option value="sphere">Random sphere</option>
+          <option value="mirror">Mirror-symmetric cube</option>
+          <option value="single">Single cell</option>
+          <option value="shell">Random spherical shell</option>
+        </select>
+      </label>
+      <label>Size<input type="range" id="size" min="2" max="100" value="20"><span class="v" id="sizeV"></span></label>
+      <label>Density<input type="range" id="density" min="1" max="100" value="50"><span class="v" id="densityV"></span></label>
+      <label>RNG seed<span class="row" style="flex-wrap:nowrap"><input type="number" id="seed" value="1"><button id="dice" title="New random seed">New</button></span></label>
+      <div class="row" style="margin-top:6px"><button class="primary" id="reset">Reset with this seed</button></div>
+    </section>
+
+    <section>
+      <h2>Playback</h2>
+      <div class="row">
+        <button class="primary" id="play" style="min-width:74px">Play</button>
+        <button id="stepBtn">Step</button>
+        <button id="step10">+10</button>
+      </div>
+      <label>Speed<input type="range" id="speed" min="1" max="60" value="12"><span class="v" id="speedV"></span></label>
+      <label>Stop when static or extinct<input type="checkbox" id="autostop" checked></label>
+    </section>
+
+    <section>
+      <h2>View</h2>
+      <label>Grid size
+        <select id="gridN"><option>24</option><option>32</option><option selected>48</option><option>64</option><option>80</option><option>96</option></select>
+      </label>
+      <label>Colour by
+        <select id="colorMode">
+          <option value="state">State (alive to decaying)</option>
+          <option value="position">Distance from centre</option>
+          <option value="nb">Alive neighbour count</option>
+          <option value="height">Height (y)</option>
+        </select>
+      </label>
+      <label>Slice (show x &lt;)<input type="range" id="slice" min="1" max="48" value="48"><span class="v" id="sliceV"></span></label>
+      <label>Show only alive (hide decaying)<input type="checkbox" id="onlyAlive"></label>
+      <label>Bounding box<input type="checkbox" id="showBox" checked></label>
+      <label>Auto-rotate<input type="checkbox" id="autoRot"></label>
+    </section>
+
+    <section>
+      <h2>Population</h2>
+      <canvas id="chart"></canvas>
+      <div class="legend"><span><span class="dot" style="background:var(--acc)"></span>alive</span><span><span class="dot" style="background:var(--acc2)"></span>decaying</span></div>
+    </section>
+
+    <section>
+      <h2>Notation</h2>
+      <div class="help">
+        Rules are written <code>S/B/C/N</code>: survival counts, birth counts, number of states, neighbourhood (<code>M</code> or <code>VN</code>). Lists take ranges, e.g. <code>4-6,9</code>.<br><br>
+        A dead cell (state 0) is born when its alive-neighbour count is in B. An alive cell (state 1) stays alive if its count is in S. Otherwise, with C &gt; 2 it starts decaying through states 2 to C-1, then dies. Decaying cells can't be reborn and don't count as neighbours. C = 2 is plain Life-like behaviour.<br><br>
+        Bays' 3D Life notation <code>EₗEᵤFₗFᵤ</code> maps to <code>Eₗ-Eᵤ / Fₗ-Fᵤ / 2 / M</code>, so Life 4555 is <code>4-5/5/2/M</code>.
+      </div>
+    </section>
+  </div>
+  <div id="view">
+    <div id="hud"></div>
+    <div id="keys">drag: orbit · scroll: zoom · space: play · . step · r reset</div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const $ = id => document.getElementById(id);
+
+// ---------- presets ----------
+const PRESETS = [
+  {name:'Pyroclastic', rule:'4-7/6-8/10/M', shape:'cube', size:25, density:50, note:'Billowing, smoke-like growth with long decay trails.'},
+  {name:'Amoeba', rule:'9-26/5-7,12-13,15/5/M', shape:'cube', size:30, density:50, note:'Grows into a large blob with a churning, decaying surface.'},
+  {name:'Architecture', rule:'4-6/3/2/M', shape:'cube', size:10, density:40, note:'Two-state growth into blocky, building-like structures.'},
+  {name:'Builder', rule:'2,6,9/4,6,8-9/10/M', shape:'cube', size:20, density:20, note:'Sparse scaffolding with long decay trails. Sensitive to the seed: denser seeds tend to die.'},
+  {name:'Clouds', rule:'13-26/13-14,17-19/2/M', shape:'cube', size:100, density:50, note:'Start from full-volume noise. Coarsens into smooth cloud blobs, then freezes (a 3D majority-vote rule).'},
+  {name:'Coral', rule:'5-8/6-7,9,12/4/M', shape:'cube', size:12, density:50, note:'Branching, coral-like growth.'},
+  {name:'Crystal growth', rule:'0-6/1,3/2/VN', shape:'single', size:2, density:100, note:'Single seed, von Neumann neighbourhood. Grows a symmetric crystal.'},
+  {name:'Pulse waves', rule:'3/1-3/10/M', shape:'cube', size:6, density:50, note:'Expanding shells of activity with long decay tails.'},
+  {name:'445', rule:'4/4/5/M', shape:'mirror', size:15, density:20, note:'A sparse rule: most random seeds die out. This mirror-symmetric seed leaves small long-lived remnants. Try other seeds.'},
+  {name:'Bays Life 4555', rule:'4-5/5/2/M', shape:'cube', size:20, density:35, note:'Carter Bays (1987), an original 3D Game of Life candidate. Soups mostly die, leaving a few still lifes and oscillators. It supports a glider, but random soups rarely produce one.'},
+  {name:'Bays Life 5766', rule:'5-7/6/2/M', shape:'cube', size:20, density:30, note:'Carter Bays (1987). Random soups usually die out quickly; it is a hunting ground for hand-built patterns.'},
+  {name:'Bays Life 5655', rule:'5-6/5/2/M', shape:'cube', size:20, density:20, note:'Carter Bays (1991). Has a very rare glider. Random soups usually die out.'},
+];
+
+// ---------- state ----------
+let N = 48, NC = 0;
+let grid, nextG, A, T1, T2, CNT, pm, pp;
+let states = 5, nbhd = 'M', wrap = false;
+let surv = new Uint8Array(27), born = new Uint8Array(27);
+let gen = 0, playing = false, history = [], live = 0, dying = 0, lastMs = 0, changed = true;
+const MAXHIST = 400;
+
+function maxNb(){ return nbhd === 'M' ? 26 : 6; }
+
+function alloc(){
+  NC = N*N*N;
+  grid = new Uint8Array(NC); nextG = new Uint8Array(NC); A = new Uint8Array(NC);
+  T1 = new Uint8Array(NC); T2 = new Uint8Array(NC); CNT = new Uint8Array(NC);
+  pm = new Int32Array(N); pp = new Int32Array(N);
+  setWrapIdx();
+}
+function setWrapIdx(){
+  for (let i=0;i<N;i++){ pm[i] = i>0 ? i-1 : (wrap ? N-1 : -1); pp[i] = i<N-1 ? i+1 : (wrap ? 0 : -1); }
+}
+
+// Moore count via separable 3x3x3 box sum minus self
+function countMoore(){
+  const n=N, n2=n*n;
+  for (let z=0; z<n; z++) for (let y=0; y<n; y++){
+    const b = z*n2 + y*n;
+    for (let x=0; x<n; x++){
+      let s = A[b+x]; const m=pm[x], p=pp[x];
+      if (m>=0) s += A[b+m]; if (p>=0) s += A[b+p];
+      T1[b+x] = s;
+    }
+  }
+  for (let z=0; z<n; z++){
+    const bz = z*n2;
+    for (let y=0; y<n; y++){
+      const b=bz+y*n, m=pm[y], p=pp[y], bm=bz+m*n, bp=bz+p*n;
+      for (let x=0; x<n; x++){
+        let s = T1[b+x]; if (m>=0) s += T1[bm+x]; if (p>=0) s += T1[bp+x];
+        T2[b+x] = s;
+      }
+    }
+  }
+  for (let z=0; z<n; z++){
+    const b=z*n2, m=pm[z], p=pp[z], bm=m*n2, bp=p*n2;
+    for (let j=0; j<n2; j++){
+      let s = T2[b+j]; if (m>=0) s += T2[bm+j]; if (p>=0) s += T2[bp+j];
+      CNT[b+j] = s - A[b+j];
+    }
+  }
+}
+function countVN(){
+  const n=N, n2=n*n;
+  for (let z=0; z<n; z++){
+    const zm=pm[z], zp=pp[z];
+    for (let y=0; y<n; y++){
+      const ym=pm[y], yp=pp[y];
+      for (let x=0; x<n; x++){
+        const xm=pm[x], xp=pp[x];
+        let s=0;
+        if (xm>=0) s += A[z*n2+y*n+xm]; if (xp>=0) s += A[z*n2+y*n+xp];
+        if (ym>=0) s += A[z*n2+ym*n+x]; if (yp>=0) s += A[z*n2+yp*n+x];
+        if (zm>=0) s += A[zm*n2+y*n+x]; if (zp>=0) s += A[zp*n2+y*n+x];
+        CNT[z*n2+y*n+x] = s;
+      }
+    }
+  }
+}
+function countAll(){ nbhd === 'M' ? countMoore() : countVN(); }
+
+function refreshAlive(){
+  live = 0; dying = 0;
+  for (let i=0;i<NC;i++){ const s=grid[i]; A[i] = s===1 ? 1 : 0; if (s===1) live++; else if (s>1) dying++; }
+}
+
+function step(){
+  const t0 = performance.now();
+  countAll();
+  const C = states; let diff = 0;
+  for (let i=0;i<NC;i++){
+    const s = grid[i]; let ns;
+    if (s === 0) ns = born[CNT[i]];
+    else if (s === 1) ns = surv[CNT[i]] ? 1 : (C > 2 ? 2 : 0);
+    else { ns = s + 1; if (ns >= C) ns = 0; }
+    nextG[i] = ns; if (ns !== s) diff = 1;
+  }
+  const t = grid; grid = nextG; nextG = t;
+  refreshAlive();
+  gen++; changed = !!diff;
+  history.push([live, dying]); if (history.length > MAXHIST) history.shift();
+  lastMs = performance.now() - t0;
+}
+
+// ---------- seeding ----------
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function seedGrid(){
+  grid.fill(0);
+  const rnd = mulberry32(parseInt($('seed').value)||0);
+  const shape = $('shape').value, size = +$('size').value/100, dens = +$('density').value/100;
+  const n=N, n2=n*n, c=(n-1)/2;
+  const set = (x,y,z)=>{ if(x>=0&&y>=0&&z>=0&&x<n&&y<n&&z<n) grid[z*n2+y*n+x]=1; };
+  if (shape === 'single'){ const k=Math.floor(n/2); set(k,k,k); }
+  else {
+    const half = Math.max(0.5, size*n/2);
+    const lo = Math.max(0, Math.floor(c-half)), hi = Math.min(n-1, Math.ceil(c+half));
+    if (shape === 'mirror'){
+      const mid = Math.floor(c);
+      for (let z=lo; z<=mid; z++) for (let y=lo; y<=mid; y++) for (let x=lo; x<=mid; x++){
+        if (Math.abs(x-c)>half||Math.abs(y-c)>half||Math.abs(z-c)>half) continue;
+        if (rnd() < dens){
+          const X=[x,n-1-x],Y=[y,n-1-y],Z=[z,n-1-z];
+          for (const a of X) for (const b of Y) for (const d of Z) set(a,b,d);
+        }
+      }
+    } else {
+      for (let z=lo; z<=hi; z++) for (let y=lo; y<=hi; y++) for (let x=lo; x<=hi; x++){
+        const dx=x-c, dy=y-c, dz=z-c;
+        if (shape==='cube'){ if (Math.abs(dx)>half||Math.abs(dy)>half||Math.abs(dz)>half) continue; }
+        else {
+          const r = Math.sqrt(dx*dx+dy*dy+dz*dz);
+          if (r>half) continue;
+          if (shape==='shell' && r < half-2) continue;
+        }
+        if (rnd() < dens) set(x,y,z);
+      }
+    }
+  }
+  gen = 0; history = []; changed = true;
+  refreshAlive(); history.push([live, dying]);
+  updateRender(); updateStats();
+}
+
+// ---------- rule parsing ----------
+function parseList(str, max){
+  const set = new Uint8Array(27); str = str.trim(); if (!str) return set;
+  for (let part of str.split(',')){
+    part = part.trim(); if (!part) continue;
+    const m = part.match(/^(\d+)(?:\s*-\s*(\d+))?$/);
+    if (!m) throw new Error(`Can't read "${part}"`);
+    let a=+m[1], b=m[2]!==undefined?+m[2]:a; if (a>b) [a,b]=[b,a];
+    for (let v=a; v<=b && v<=max; v++) set[v]=1;
+  }
+  return set;
+}
+function fmtList(set, max){
+  const out=[]; let v=0;
+  while (v<=max){
+    if (!set[v]){ v++; continue; }
+    let w=v; while (w+1<=max && set[w+1]) w++;
+    out.push(w===v ? `${v}` : `${v}-${w}`); v=w+1;
+  }
+  return out.join(',');
+}
+function ruleString(){ return `${fmtList(surv,maxNb())}/${fmtList(born,maxNb())}/${states}/${nbhd}`; }
+function applyRuleString(str){
+  const parts = str.split('/');
+  if (parts.length < 3 || parts.length > 4) throw new Error('Use S/B/C/N, e.g. 4/4/5/M');
+  const nbRaw = (parts[3]||'M').trim().toUpperCase();
+  const nb = nbRaw.startsWith('V') ? 'VN' : 'M';
+  if (!['M','VN','V','N','MOORE'].includes(nbRaw) && !nbRaw.startsWith('V')) throw new Error('Neighbourhood must be M or VN');
+  const max = nb==='M'?26:6;
+  const S = parseList(parts[0], max), B = parseList(parts[1], max);
+  const C = parseInt(parts[2]);
+  if (!(C>=2 && C<=64)) throw new Error('States must be 2 to 64');
+  surv=S; born=B; nbhd=nb; setStates(C);
+}
+function setStates(C){
+  states = C;
+  if (grid) for (let i=0;i<NC;i++) if (grid[i]>=C) grid[i]=0;
+}
+function syncRuleUI(){
+  $('ruleText').value = ruleString();
+  $('ruleErr').textContent = '';
+  $('states').value = states;
+  $('nbhd').value = nbhd;
+  buildChips();
+  rebuildPalette();
+}
+function buildChips(){
+  const max = maxNb();
+  for (const [id, arr] of [['chipsS', surv], ['chipsB', born]]){
+    const el = $(id); el.innerHTML = '';
+    for (let v=0; v<=max; v++){
+      const b = document.createElement('button');
+      b.className = 'chip' + (arr[v] ? ' on' : ''); b.textContent = v;
+      b.onclick = () => { arr[v] = arr[v]?0:1; changed = true; syncRuleUI(); };
+      el.appendChild(b);
+    }
+  }
+}
+
+// ---------- rendering ----------
+const view = $('view');
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setClearColor(0x0d0f14);
+view.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 5000);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+
+const mat = new THREE.ShaderMaterial({
+  vertexShader: `
+    attribute vec3 offset; attribute vec3 icolor;
+    varying vec3 vColor; varying vec3 vN;
+    void main(){
+      vColor = icolor; vN = normalize(normalMatrix * normal);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position + offset, 1.0);
+    }`,
+  fragmentShader: `
+    varying vec3 vColor; varying vec3 vN;
+    void main(){
+      vec3 L1 = normalize(vec3(0.4, 0.8, 0.6)); vec3 L2 = normalize(vec3(-0.6, -0.2, 0.4));
+      float d = 0.32 + 0.58*max(dot(vN, L1), 0.0) + 0.18*max(dot(vN, L2), 0.0);
+      gl_FragColor = vec4(vColor * d, 1.0);
+    }`
+});
+let mesh=null, geo=null, offAttr=null, colAttr=null, boxLines=null;
+
+function buildRenderBuffers(){
+  if (mesh){ scene.remove(mesh); geo.dispose(); }
+  if (boxLines){ scene.remove(boxLines); boxLines.geometry.dispose(); }
+  const base = new THREE.BoxGeometry(0.9, 0.9, 0.9);
+  geo = new THREE.InstancedBufferGeometry();
+  geo.index = base.index;
+  geo.setAttribute('position', base.attributes.position);
+  geo.setAttribute('normal', base.attributes.normal);
+  offAttr = new THREE.InstancedBufferAttribute(new Float32Array(NC*3), 3); offAttr.setUsage(THREE.DynamicDrawUsage);
+  colAttr = new THREE.InstancedBufferAttribute(new Float32Array(NC*3), 3); colAttr.setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('offset', offAttr); geo.setAttribute('icolor', colAttr);
+  geo.instanceCount = 0;
+  mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false; scene.add(mesh);
+  boxLines = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(N, N, N)),
+    new THREE.LineBasicMaterial({color:0x3a4155}));
+  boxLines.visible = $('showBox').checked; scene.add(boxLines);
+  camera.position.set(N*1.35, N*1.0, N*1.65); controls.target.set(0,0,0); controls.update();
+}
+
+// colour gradient
+const STOPS = [[253,230,138],[249,115,22],[219,39,119],[109,40,217],[30,58,138]].map(c=>c.map(v=>v/255));
+function grad(t){
+  t = Math.min(1, Math.max(0, t)); const f = t*(STOPS.length-1); const i = Math.min(STOPS.length-2, Math.floor(f)); const u = f-i;
+  const a=STOPS[i], b=STOPS[i+1]; return [a[0]+(b[0]-a[0])*u, a[1]+(b[1]-a[1])*u, a[2]+(b[2]-a[2])*u];
+}
+let stateLUT = [];
+function rebuildPalette(){
+  stateLUT = [null];
+  for (let s=1; s<states; s++) stateLUT.push(states===2 ? [0.98,0.62,0.25] : grad((s-1)/Math.max(1,states-2)));
+}
+
+function updateRender(){
+  const mode = $('colorMode').value, slice = +$('slice').value, onlyAlive = $('onlyAlive').checked;
+  if (mode === 'nb') countAll();
+  const o = offAttr.array, col = colAttr.array, h = N/2 - 0.5, n=N, n2=n*n, c=(n-1)/2, rmax = Math.sqrt(3)*n/2, mx = maxNb();
+  let k = 0;
+  for (let z=0; z<n; z++) for (let y=0; y<n; y++){
+    const b = z*n2 + y*n;
+    for (let x=0; x<slice && x<n; x++){
+      const s = grid[b+x]; if (!s) continue; if (onlyAlive && s!==1) continue;
+      const j = k*3; o[j]=x-h; o[j+1]=y-h; o[j+2]=z-h;
+      let rgb;
+      if (mode === 'state') rgb = stateLUT[s] || [1,1,1];
+      else {
+        let t;
+        if (mode === 'position'){ const dx=x-c,dy=y-c,dz=z-c; t = Math.sqrt(dx*dx+dy*dy+dz*dz)/rmax*1.6; }
+        else if (mode === 'nb') t = CNT[b+x]/mx;
+        else t = 1 - y/(n-1);
+        rgb = grad(t);
+        if (s>1){ const f = 1 - 0.65*(s-1)/Math.max(1,states-1); rgb = [rgb[0]*f, rgb[1]*f, rgb[2]*f]; }
+      }
+      col[j]=rgb[0]; col[j+1]=rgb[1]; col[j+2]=rgb[2];
+      k++;
+    }
+  }
+  geo.instanceCount = k;
+  for (const at of [offAttr, colAttr]){ at.clearUpdateRanges(); at.addUpdateRange(0, Math.max(3, k*3)); at.needsUpdate = true; }
+}
+
+// ---------- stats + chart ----------
+const chart = $('chart'), cctx = chart.getContext('2d');
+function drawChart(){
+  const dpr = Math.min(window.devicePixelRatio, 2), w = chart.clientWidth, hgt = chart.clientHeight;
+  if (chart.width !== w*dpr){ chart.width = w*dpr; chart.height = hgt*dpr; }
+  cctx.setTransform(dpr,0,0,dpr,0,0); cctx.clearRect(0,0,w,hgt);
+  if (history.length < 2) return;
+  let mxv = 1; for (const [a,d] of history) mxv = Math.max(mxv, a, d);
+  const col = getComputedStyle(document.documentElement);
+  for (const [idx, color] of [[1, col.getPropertyValue('--acc2')], [0, col.getPropertyValue('--acc')]]){
+    cctx.beginPath(); cctx.strokeStyle = color.trim(); cctx.lineWidth = 1.5;
+    history.forEach((p,i)=>{ const X = i/(MAXHIST-1)*w, Y = hgt-4-(p[idx]/mxv)*(hgt-8); i?cctx.lineTo(X,Y):cctx.moveTo(X,Y); });
+    cctx.stroke();
+  }
+}
+function updateStats(){
+  const fmt = v => v.toLocaleString();
+  $('hud').textContent = `rule  ${ruleString()}\ngen   ${gen}\nalive ${fmt(live)}   decaying ${fmt(dying)}\ngrid  ${N}³  ·  ${lastMs.toFixed(1)} ms/step` + (playing ? '' : '\n(paused)');
+  drawChart();
+}
+
+// ---------- controls ----------
+function setPlaying(p){ playing = p; $('play').textContent = p ? 'Pause' : 'Play'; updateStats(); }
+function doSteps(k){ for (let i=0;i<k;i++) step(); updateRender(); updateStats(); }
+
+function loadPreset(i){
+  const p = PRESETS[i];
+  applyRuleString(p.rule);
+  $('shape').value = p.shape; $('size').value = p.size; $('density').value = p.density;
+  $('colorMode').value = states > 2 ? 'state' : 'position';
+  $('presetNote').textContent = p.note;
+  syncRuleUI(); syncLabels(); seedGrid();
+}
+function syncLabels(){
+  $('sizeV').textContent = $('size').value + '%';
+  $('densityV').textContent = $('density').value + '%';
+  $('speedV').textContent = $('speed').value + '/s';
+  $('sliceV').textContent = $('slice').value;
+}
+
+PRESETS.forEach((p,i)=>{ const o=document.createElement('option'); o.value=i; o.textContent=`${p.name}  ·  ${p.rule}`; $('preset').appendChild(o); });
+$('preset').onchange = e => loadPreset(+e.target.value);
+
+$('ruleText').addEventListener('change', e => {
+  try { applyRuleString(e.target.value); changed = true; syncRuleUI(); updateRender(); updateStats(); $('preset').value=''; $('presetNote').textContent='Custom rule.'; }
+  catch(err){ $('ruleErr').textContent = err.message; }
+});
+$('ruleText').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+$('copyRule').onclick = async () => {
+  try { await navigator.clipboard.writeText(ruleString()); $('copyRule').textContent='Copied'; setTimeout(()=>$('copyRule').textContent='Copy',1200); }
+  catch { $('ruleText').select(); }
+};
+$('states').onchange = e => { const C = Math.min(64, Math.max(2, parseInt(e.target.value)||2)); setStates(C); refreshAlive(); changed=true; syncRuleUI(); updateRender(); updateStats(); };
+$('nbhd').onchange = e => {
+  nbhd = e.target.value; const max = maxNb();
+  for (let v=max+1; v<27; v++){ surv[v]=0; born[v]=0; }
+  changed=true; syncRuleUI(); updateStats();
+};
+$('wrap').onchange = e => { wrap = e.target.checked; setWrapIdx(); changed=true; };
+$('clearS').onclick = () => { surv.fill(0); changed=true; syncRuleUI(); };
+$('clearB').onclick = () => { born.fill(0); changed=true; syncRuleUI(); };
+$('randRule').onclick = () => {
+  const r = Math.random, max = maxNb(), pS = 0.15+0.3*r(), pB = 0.05+0.2*r();
+  surv.fill(0); born.fill(0);
+  for (let v=0; v<=max; v++){ if (r()<pS) surv[v]=1; if (v>0 && r()<pB) born[v]=1; }
+  if (!born.some(x=>x)) born[1+Math.floor(r()*Math.min(8,max))] = 1;
+  setStates(2 + Math.floor(r()*9));
+  $('preset').value=''; $('presetNote').textContent='Random rule. Most random rules explode or die; keep rolling.';
+  syncRuleUI(); seedGrid();
+};
+
+for (const id of ['size','density','speed']) $(id).addEventListener('input', syncLabels);
+for (const id of ['shape']) $(id).addEventListener('change', ()=>{});
+$('dice').onclick = () => { $('seed').value = Math.floor(Math.random()*1e6); seedGrid(); };
+$('reset').onclick = () => seedGrid();
+$('play').onclick = () => setPlaying(!playing);
+$('stepBtn').onclick = () => { setPlaying(false); doSteps(1); };
+$('step10').onclick = () => { setPlaying(false); doSteps(10); };
+$('gridN').onchange = e => {
+  N = +e.target.value; alloc(); buildRenderBuffers();
+  $('slice').max = N; $('slice').value = N; syncLabels(); seedGrid();
+};
+$('colorMode').onchange = () => updateRender();
+$('slice').addEventListener('input', () => { syncLabels(); updateRender(); });
+$('onlyAlive').onchange = () => updateRender();
+$('showBox').onchange = e => { if (boxLines) boxLines.visible = e.target.checked; };
+$('autoRot').onchange = e => { controls.autoRotate = e.target.checked; controls.autoRotateSpeed = 1.2; };
+
+window.addEventListener('keydown', e => {
+  if (e.target.matches('input,select,textarea')) return;
+  if (e.code === 'Space'){ e.preventDefault(); setPlaying(!playing); }
+  else if (e.key === '.'){ setPlaying(false); doSteps(1); }
+  else if (e.key === 'r' || e.key === 'R'){ seedGrid(); }
+});
+
+function resize(){
+  const w = view.clientWidth, h = view.clientHeight;
+  renderer.setSize(w, h); camera.aspect = w/Math.max(1,h); camera.updateProjectionMatrix();
+  drawChart();
+}
+new ResizeObserver(resize).observe(view);
+
+// ---------- loop ----------
+let acc = 0, last = performance.now();
+function frame(now){
+  requestAnimationFrame(frame);
+  const dt = now - last; last = now;
+  if (playing){
+    acc += dt; const interval = 1000 / +$('speed').value;
+    const cap = lastMs > 10 ? 1 : 4; let k = 0;
+    while (acc >= interval && k < cap){ step(); acc -= interval; k++; }
+    if (acc > interval*4) acc = 0;
+    if (k){
+      updateRender(); updateStats();
+      if ($('autostop').checked && (!changed || live + dying === 0)) setPlaying(false);
+    }
+  }
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+// ---------- init ----------
+alloc(); buildRenderBuffers(); resize();
+$('slice').max = N; $('slice').value = N;
+loadPreset(0);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
